@@ -214,38 +214,41 @@ export async function GET(request: Request) {
   const finalGeography = geography.length > 0 ? geography : convGeography;
 
   // ── 6. FEATURE ADOPTION ────────────────────────────────────────────────────
-  const [savedRes, pinnedRes, exportRes] = await Promise.all([
+  const [savedRes, pinnedRes, exportRes, allProfilesRes] = await Promise.all([
     supabase.from('saved_items').select('user_id'),
     supabase.from('conversations').select('user_id').eq('is_pinned', true),
     supabase.from('usage_summary').select('user_id').gt('export_count', 0),
+    supabase.from('profiles').select('*', { count: 'exact', head: true })
   ]);
 
   if (savedRes.error) errors.push(`saved_items (adoption): ${savedRes.error.message}`);
   if (pinnedRes.error) errors.push(`conversations (pinned): ${pinnedRes.error.message}`);
   if (exportRes.error) errors.push(`usage_summary (export): ${exportRes.error.message}`);
+  if (allProfilesRes.error) errors.push(`profiles (all): ${allProfilesRes.error.message}`);
 
   const savedAdopters = new Set(savedRes.data?.map((s: any) => s.user_id) ?? []).size;
   const pinnedAdopters = new Set(pinnedRes.data?.map((c: any) => c.user_id) ?? []).size;
   const exportAdopters = new Set(exportRes.data?.map((e: any) => e.user_id) ?? []).size;
+  const allTimeUsers = allProfilesRes.count ?? totalUsers;
 
   const adoption = [
     {
       feature: 'Saved Items',
       adoptedUsers: savedAdopters,
-      totalUsers,
-      percentage: totalUsers > 0 ? Number(((savedAdopters / totalUsers) * 100).toFixed(1)) : 0,
+      totalUsers: allTimeUsers,
+      percentage: allTimeUsers > 0 ? Number(((savedAdopters / allTimeUsers) * 100).toFixed(1)) : 0,
     },
     {
       feature: 'Pinned Conversations',
       adoptedUsers: pinnedAdopters,
-      totalUsers,
-      percentage: totalUsers > 0 ? Number(((pinnedAdopters / totalUsers) * 100).toFixed(1)) : 0,
+      totalUsers: allTimeUsers,
+      percentage: allTimeUsers > 0 ? Number(((pinnedAdopters / allTimeUsers) * 100).toFixed(1)) : 0,
     },
     {
       feature: 'Data Export',
       adoptedUsers: exportAdopters,
-      totalUsers,
-      percentage: totalUsers > 0 ? Number(((exportAdopters / totalUsers) * 100).toFixed(1)) : 0,
+      totalUsers: allTimeUsers,
+      percentage: allTimeUsers > 0 ? Number(((exportAdopters / allTimeUsers) * 100).toFixed(1)) : 0,
     },
   ];
 

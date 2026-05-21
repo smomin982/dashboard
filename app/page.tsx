@@ -59,14 +59,14 @@ export default function DashboardPage() {
         alignItems: 'center',
         justifyContent: 'center',
         gap: '16px',
-        color: '#94a3b8',
-        background: '#0f172a',
+        color: 'var(--text-secondary)',
+        background: 'var(--bg-primary)',
         fontFamily: 'var(--font-inter, sans-serif)'
       }}>
         <div style={{
           width: '40px', height: '40px',
-          border: '3px solid #1e293b',
-          borderTop: '3px solid #6366f1',
+          border: '3px solid var(--border-color)',
+          borderTop: '3px solid var(--accent-primary)',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite'
         }} />
@@ -84,8 +84,8 @@ export default function DashboardPage() {
       {/* ── Connection Status Banner ── */}
       {queryErrors.length > 0 && (
         <div style={{
-          background: 'rgba(234,179,8,0.1)',
-          border: '1px solid rgba(234,179,8,0.3)',
+          background: 'rgba(245,158,11,0.1)',
+          border: '1px solid rgba(245,158,11,0.3)',
           borderRadius: '12px',
           padding: '12px 16px',
           marginBottom: '24px',
@@ -93,12 +93,12 @@ export default function DashboardPage() {
           flexDirection: 'column',
           gap: '6px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24', fontWeight: 600, fontSize: '13px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309', fontWeight: 600, fontSize: '13px' }}>
             <AlertTriangle size={15} />
             Some queries returned errors (check RLS policies or column names):
           </div>
           {queryErrors.map((e, i) => (
-            <div key={i} style={{ color: '#94a3b8', fontSize: '12px', paddingLeft: '23px', fontFamily: 'monospace' }}>
+            <div key={i} style={{ color: 'var(--text-secondary)', fontSize: '12px', paddingLeft: '23px', fontFamily: 'monospace' }}>
               {e}
             </div>
           ))}
@@ -111,7 +111,7 @@ export default function DashboardPage() {
           alignItems: 'center',
           gap: '6px',
           marginBottom: '16px',
-          color: '#34d399',
+          color: 'var(--success)',
           fontSize: '12px',
           fontWeight: 600
         }}>
@@ -200,14 +200,14 @@ export default function DashboardPage() {
               <InsightRow
                 label="Top Indicator Category"
                 value={`${data.categories[0].category} (${data.categories[0].count})`}
-                color="#f59e0b"
+                color="var(--accent-primary)"
               />
             )}
             {data.geography[0] && (
               <InsightRow
                 label="Top Country"
                 value={`${data.geography[0].country} (${data.geography[0].count})`}
-                color="#ec4899"
+                color="var(--success)"
               />
             )}
           </div>
@@ -222,7 +222,7 @@ function EmptyState({ label }: { label: string }) {
   return (
     <div className="glass-panel chart-container" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: '#475569', fontSize: '13px', textAlign: 'center', padding: '40px'
+      color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '40px'
     }}>
       {label}
     </div>
@@ -231,7 +231,7 @@ function EmptyState({ label }: { label: string }) {
 
 function InsightRow({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '8px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
       <span>{label}</span>
       <span style={{ color, fontWeight: 700, fontSize: '13px' }}>{value}</span>
     </div>

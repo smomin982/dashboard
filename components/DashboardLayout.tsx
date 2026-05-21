@@ -15,7 +15,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <LayoutDashboard color="white" size={24} />
           </div>
-          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#fff' }}>Copilot OS</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Copilot OS</h2>
         </div>
         
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -35,13 +35,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 padding: '12px 16px',
                 borderRadius: '8px',
                 cursor: 'pointer',
-                background: item.active ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                background: item.active ? 'rgba(6, 64, 43, 0.1)' : 'transparent',
                 color: item.active ? 'var(--accent-primary)' : 'var(--text-secondary)',
                 transition: 'all 0.2s',
                 fontWeight: item.active ? 600 : 500
               }}
               onMouseEnter={(e) => {
-                if (!item.active) e.currentTarget.style.color = '#fff';
+                if (!item.active) e.currentTarget.style.color = 'var(--text-primary)';
               }}
               onMouseLeave={(e) => {
                 if (!item.active) e.currentTarget.style.color = 'var(--text-secondary)';

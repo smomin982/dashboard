@@ -13,10 +13,10 @@ const COLORS = ['#06402B', '#4a6b5d', '#789c8a', '#a3bfae', '#D2DAD2', '#10b981'
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="glass-panel" style={{ padding: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-        <p style={{ margin: '0 0 8px 0', color: '#94a3b8', fontSize: '12px' }}>{label}</p>
+      <div className="glass-panel" style={{ padding: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
+        <p style={{ margin: '0 0 8px 0', color: 'var(--text-secondary)', fontSize: '12px' }}>{label}</p>
         {payload.map((entry: any, index: number) => (
-          <p key={index} style={{ color: entry.color || '#fff', margin: '4px 0', fontWeight: 600 }}>
+          <p key={index} style={{ color: entry.color || 'var(--text-primary)', margin: '4px 0', fontWeight: 600 }}>
             {entry.name}: {entry.value}
           </p>
         ))}
@@ -35,21 +35,21 @@ export function TrendChart({ data }: { data: TimeSeriesDataPoint[] }) {
           <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorDau" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorQueries" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                <stop offset="5%" stopColor="#06402B" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#06402B" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-            <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+            <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} />
+            <YAxis stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
-            <Area type="monotone" dataKey="queries" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorQueries)" />
-            <Area type="monotone" dataKey="dau" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorDau)" />
+            <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: 'var(--text-secondary)' }} />
+            <Area type="monotone" dataKey="queries" stroke="#06402B" strokeWidth={2} fillOpacity={1} fill="url(#colorQueries)" />
+            <Area type="monotone" dataKey="dau" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorDau)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -64,10 +64,10 @@ export function CategoryChart({ data }: { data: CategoryInsight[] }) {
       <div className="chart-body">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 30, left: 40, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
-            <XAxis type="number" stroke="#94a3b8" fontSize={12} hide />
-            <YAxis dataKey="category" type="category" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} width={120} />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+            <XAxis type="number" stroke="var(--text-secondary)" fontSize={12} hide />
+            <YAxis dataKey="category" type="category" stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} width={120} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(6,64,43,0.05)' }} />
             <Bar dataKey="count" radius={[0, 4, 4, 0]}>
               {data.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -103,7 +103,7 @@ export function GeoChart({ data }: { data: GeoInsight[] }) {
               ))}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
-            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
+            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: 'var(--text-secondary)' }} />
           </PieChart>
         </ResponsiveContainer>
       </div>
@@ -119,10 +119,10 @@ export function AdoptionChart({ data }: { data: FeatureAdoption[] }) {
         {data.map((item, index) => (
           <div key={index} style={{ width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-              <span style={{ color: '#f8fafc' }}>{item.feature}</span>
+              <span style={{ color: 'var(--text-primary)' }}>{item.feature}</span>
               <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>{item.percentage}%</span>
             </div>
-            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ width: '100%', height: '8px', background: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
               <div 
                 style={{ 
                   width: `${item.percentage}%`, 
