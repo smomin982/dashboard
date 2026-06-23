@@ -29,7 +29,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export function TrendChart({ data }: { data: TimeSeriesDataPoint[] }) {
   return (
     <div className="glass-panel chart-container fade-in" style={{ animationDelay: '0.2s' }}>
-      <h3 className="chart-title">Usage Trends (DAU, Queries, Visualizations)</h3>
+      <h3 className="chart-title">Usage Trends</h3>
       <div className="chart-body">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -42,14 +42,19 @@ export function TrendChart({ data }: { data: TimeSeriesDataPoint[] }) {
                 <stop offset="5%" stopColor="#06402B" stopOpacity={0.3} />
                 <stop offset="95%" stopColor="#06402B" stopOpacity={0} />
               </linearGradient>
+              <linearGradient id="colorViz" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#789c8a" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#789c8a" stopOpacity={0} />
+              </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
             <XAxis dataKey="date" stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} />
             <YAxis stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} />
             <Tooltip content={<CustomTooltip />} />
             <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: 'var(--text-secondary)' }} />
-            <Area type="monotone" dataKey="queries" stroke="#06402B" strokeWidth={2} fillOpacity={1} fill="url(#colorQueries)" />
-            <Area type="monotone" dataKey="dau" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorDau)" />
+            <Area type="monotone" dataKey="queries" name="Queries" stroke="#06402B" strokeWidth={2} fillOpacity={1} fill="url(#colorQueries)" />
+            <Area type="monotone" dataKey="dau" name="Active Users" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorDau)" />
+            <Area type="monotone" dataKey="visualizations" name="Visualizations" stroke="#789c8a" strokeWidth={2} fillOpacity={1} fill="url(#colorViz)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -83,7 +88,7 @@ export function CategoryChart({ data }: { data: CategoryInsight[] }) {
 export function GeoChart({ data }: { data: GeoInsight[] }) {
   return (
     <div className="glass-panel chart-container fade-in" style={{ animationDelay: '0.4s' }}>
-      <h3 className="chart-title">Geographic Distribution</h3>
+      <h3 className="chart-title">Research Focus by Country</h3>
       <div className="chart-body">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -114,7 +119,7 @@ export function GeoChart({ data }: { data: GeoInsight[] }) {
 export function AdoptionChart({ data }: { data: FeatureAdoption[] }) {
   return (
     <div className="glass-panel chart-container fade-in" style={{ animationDelay: '0.5s' }}>
-      <h3 className="chart-title">Feature Adoption Rate</h3>
+      <h3 className="chart-title">Feature Adoption Rate (all-time)</h3>
       <div className="chart-body" style={{ display: 'flex', flexDirection: 'column', gap: '24px', justifyContent: 'center', padding: '0 16px' }}>
         {data.map((item, index) => (
           <div key={index} style={{ width: '100%' }}>

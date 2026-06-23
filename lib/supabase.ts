@@ -27,13 +27,13 @@ export interface FetchResult {
   errors: string[]; // non-fatal errors logged per query for transparency
 }
 
-export const fetchDashboardData = async (days: string = '7', region: string = 'all'): Promise<FetchResult> => {
+export const fetchDashboardData = async (days: string = '7'): Promise<FetchResult> => {
   if (!supabase) {
     return { data: emptyDashboard(), errors: ['NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY not set.'] };
   }
 
   try {
-    const params = new URLSearchParams({ days, region });
+    const params = new URLSearchParams({ days });
     const response = await fetch(`/api/metrics?${params.toString()}`);
     if (!response.ok) {
       const text = await response.text();
@@ -52,6 +52,7 @@ function emptyDashboard(): DashboardData {
   return {
     kpis: {
       totalUsers: 0,
+      activeUsers: 0,
       totalConversations: 0,
       totalMessages: 0,
       totalQueries: 0,

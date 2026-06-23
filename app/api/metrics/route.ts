@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // This route runs SERVER-SIDE only. The service_role key is never sent to the browser.
 // It bypasses RLS so we can aggregate data across all users for admin analytics.
+//
+// Heavy aggregations (daily trends, session length, adoption, engagement, themes)
+// are done in Postgres via RPCs defined in
+//   supabase_stuff/migrations/20260604120000_dashboard_metrics_rpcs.sql
+// This avoids the PostgREST 1000-row default cap that silently truncated the
+// previous JS-side aggregations, and sources the real DAU trend from
+// usage_analytics instead of the (now one-row-per-user) usage_summary table.
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,6 +22,32 @@ function getAdminClient() {
   return createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+// Fetch every row from a table by paging past the 1000-row cap. Used only where
+// we still classify text in JS (conversation titles, project countries).
+async function fetchAllRows(
+  supabase: SupabaseClient,
+  table: string,
+  columns: string,
+  filter: (q: any) => any,
+  hardCap = 50000
+): Promise<{ rows: any[]; error: string | null }> {
+  const pageSize = 1000;
+  let from = 0;
+  const rows: any[] = [];
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await filter(
+      supabase.from(table).select(columns).range(from, from + pageSize - 1)
+    );
+    if (error) return { rows, error: error.message };
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < pageSize || rows.length >= hardCap) break;
+    from += pageSize;
+  }
+  return { rows, error: null };
 }
 
 export async function GET(request: Request) {
@@ -32,88 +65,92 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const days = searchParams.get('days') || '7';
-  const region = searchParams.get('region') || 'all';
 
-  let dateFilter = '';
+  // Two representations of the window:
+  //  - dateFilterTs : full timestamp, for .gte() on timestamptz columns (KPI head-counts)
+  //  - startDate    : YYYY-MM-DD date, passed to the aggregation RPCs (p_start)
+  // Both are null/'' for "all time".
+  let dateFilterTs = '';
+  let startDate: string | null = null;
   if (days !== 'all') {
     const d = new Date();
     d.setDate(d.getDate() - parseInt(days));
-    dateFilter = d.toISOString();
+    dateFilterTs = d.toISOString();
+    startDate = dateFilterTs.slice(0, 10);
   }
 
   const applyDate = (query: any, field: string = 'created_at') => {
-    return dateFilter ? query.gte(field, dateFilter) : query;
-  };
-
-  const applyRegion = (query: any) => {
-    // Only apply region if we know the table supports it, e.g., if there's a join or field.
-    // For now, most tables don't have region directly without joins, so we'll stick to Date filtering for core metrics.
-    return query;
+    return dateFilterTs ? query.gte(field, dateFilterTs) : query;
   };
 
   const errors: string[] = [];
 
+  // Turn a Postgres "function does not exist" error into an actionable hint.
+  const rpcError = (label: string, message: string) => {
+    if (/function .* does not exist|could not find the function/i.test(message)) {
+      errors.push(
+        `${label}: aggregation function missing. Apply migration ` +
+          `supabase_stuff/migrations/20260604120000_dashboard_metrics_rpcs.sql`
+      );
+    } else {
+      errors.push(`${label}: ${message}`);
+    }
+  };
+
   // ── 1. KPI COUNTS ──────────────────────────────────────────────────────────
-  const [profilesRes, convsRes, allMsgsRes, userMsgsRes, visItemsRes] = await Promise.all([
-    applyDate(supabase.from('profiles').select('*', { count: 'exact', head: true })),
+  // Total Users is ALL-TIME on purpose (a cumulative headline). The other three
+  // counts are windowed by the selected period.
+  const [usersRes, convsRes, allMsgsRes, userMsgsRes] = await Promise.all([
+    supabase.from('profiles').select('*', { count: 'exact', head: true }),
     applyDate(supabase.from('conversations').select('*', { count: 'exact', head: true })),
     applyDate(supabase.from('messages').select('*', { count: 'exact', head: true })),
     applyDate(supabase.from('messages').select('*', { count: 'exact', head: true })).eq('role', 'user'),
-    applyDate(supabase.from('saved_items').select('*', { count: 'exact', head: true })).eq('item_type', 'visualization'),
   ]);
 
-  if (profilesRes.error) errors.push(`profiles: ${profilesRes.error.message}`);
+  if (usersRes.error) errors.push(`profiles: ${usersRes.error.message}`);
   if (convsRes.error) errors.push(`conversations: ${convsRes.error.message}`);
   if (allMsgsRes.error) errors.push(`messages (all): ${allMsgsRes.error.message}`);
   if (userMsgsRes.error) errors.push(`messages (user): ${userMsgsRes.error.message}`);
-  if (visItemsRes.error) errors.push(`saved_items (vis): ${visItemsRes.error.message}`);
 
-  const totalUsers = profilesRes.count ?? 0;
+  const totalUsers = usersRes.count ?? 0;
   const totalConversations = convsRes.count ?? 0;
   const totalMessages = allMsgsRes.count ?? 0;
   const totalQueries = userMsgsRes.count ?? 0;
-  const totalVisualizations = visItemsRes.count ?? 0;
 
-  // ── 2. USAGE SUMMARY → avg session duration + daily trend ─────────────────
-  const usageRes = await applyDate(supabase.from('usage_summary').select('session_duration_seconds, unique_visits, query_count, visualization_count, date'), 'date').order('date', { ascending: true });
+  // ── 2. DAILY TRENDS (RPC) → real DAU + queries + visualizations per day ─────
+  const trendsRes = await supabase.rpc('dashboard_daily_trends', { p_start: startDate });
+  if (trendsRes.error) rpcError('daily trends', trendsRes.error.message);
 
-  if (usageRes.error) errors.push(`usage_summary: ${usageRes.error.message}`);
+  const trends = (trendsRes.data ?? []).map((r: any) => ({
+    date: r.day as string,
+    dau: r.dau as number,
+    queries: r.queries as number,
+    visualizations: r.visualizations as number,
+  }));
 
-  const usageRows = usageRes.data ?? [];
-  let avgSessionDurationSec = 0;
-  const trendsMap: Record<string, { date: string; dau: number; queries: number; visualizations: number }> = {};
+  // Visualizations KPI is the windowed total of the same series the chart plots,
+  // so the headline number always reconciles with the trend line.
+  const totalVisualizations = trends.reduce((acc: number, t: any) => acc + (t.visualizations ?? 0), 0);
 
-  if (usageRows.length > 0) {
-    let totalDuration = 0;
-    let totalVisits = 0;
+  // ── 3. SESSION STATS (RPC) → real avg session length ────────────────────────
+  const sessionRes = await supabase.rpc('dashboard_session_stats', { p_start: startDate });
+  if (sessionRes.error) rpcError('session stats', sessionRes.error.message);
+  const sessionRow = sessionRes.data?.[0] ?? {};
+  const avgSessionDurationSec = sessionRow.avg_session_seconds ?? 0;
+  const activeUsers = sessionRow.active_users ?? 0;
 
-    usageRows.forEach((row: any) => {
-      totalDuration += row.session_duration_seconds ?? 0;
-      totalVisits += row.unique_visits ?? 0;
+  // ── 4. GEOGRAPHY + CATEGORIES from projects (paginated, windowed) ───────────
+  const projFetch = await fetchAllRows(
+    supabase,
+    'projects',
+    'country, indicators, created_at',
+    (q) => applyDate(q)
+  );
+  if (projFetch.error) errors.push(`projects: ${projFetch.error}`);
 
-      const d = row.date as string;
-      if (!trendsMap[d]) trendsMap[d] = { date: d, dau: 0, queries: 0, visualizations: 0 };
-      trendsMap[d].dau += row.unique_visits ?? 0;
-      trendsMap[d].queries += row.query_count ?? 0;
-      trendsMap[d].visualizations += row.visualization_count ?? 0;
-    });
-
-    avgSessionDurationSec = totalVisits > 0 ? Math.round(totalDuration / totalVisits) : 0;
-  }
-
-  const trends = Object.values(trendsMap)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-30);
-
-  // ── 3. GEOGRAPHY + CATEGORIES from projects ────────────────────────────────
-  const projRes = await supabase.from('projects').select('country, indicators');
-  if (projRes.error) errors.push(`projects: ${projRes.error.message}`);
-
-  const projRows = projRes.data ?? [];
   const countryMap: Record<string, number> = {};
   const categoryMap: Record<string, number> = {};
-
-  projRows.forEach((p: any) => {
+  projFetch.rows.forEach((p: any) => {
     if (p.country) countryMap[p.country] = (countryMap[p.country] ?? 0) + 1;
     (p.indicators as string[] | null)?.forEach((ind: string) => {
       categoryMap[ind] = (categoryMap[ind] ?? 0) + 1;
@@ -128,19 +165,16 @@ export async function GET(request: Request) {
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count);
 
-  // ── 4. CATEGORY INSIGHTS FROM CONVERSATIONS ────────────────────────────────
-  // Extract topic categories from conversation titles (the actual user questions)
-  const convTitlesRes = await supabase
-    .from('conversations')
-    .select('title')
-    .not('title', 'is', null);
+  // ── 5. TOPIC + COUNTRY EXTRACTION from conversation titles (paginated) ──────
+  const titleFetch = await fetchAllRows(
+    supabase,
+    'conversations',
+    'title, created_at',
+    (q) => applyDate(q).not('title', 'is', null)
+  );
+  if (titleFetch.error) errors.push(`conversations (titles): ${titleFetch.error}`);
+  const convTitles = titleFetch.rows;
 
-  if (convTitlesRes.error) errors.push(`conversations (titles): ${convTitlesRes.error.message}`);
-
-  const convTitles = convTitlesRes.data ?? [];
-  const topicMap: Record<string, number> = {};
-
-  // Keyword-based topic extraction from conversation titles
   const topicKeywords: Record<string, string[]> = {
     'Youth Unemployment': ['unemployment', 'youth employment', 'job', 'employment rate'],
     'Education': ['education', 'school', 'literacy', 'enrollment', 'student'],
@@ -154,31 +188,27 @@ export async function GET(request: Request) {
     'Demographics': ['population', 'birth', 'death', 'migration', 'children'],
   };
 
+  const topicMap: Record<string, number> = {};
   convTitles.forEach((c: any) => {
     const title = (c.title as string).toLowerCase();
     let matched = false;
     for (const [topic, keywords] of Object.entries(topicKeywords)) {
-      if (keywords.some(kw => title.includes(kw))) {
+      if (keywords.some((kw) => title.includes(kw))) {
         topicMap[topic] = (topicMap[topic] ?? 0) + 1;
         matched = true;
         break; // one topic per conversation
       }
     }
-    if (!matched) {
-      topicMap['Other'] = (topicMap['Other'] ?? 0) + 1;
-    }
+    if (!matched) topicMap['Other'] = (topicMap['Other'] ?? 0) + 1;
   });
 
   const conversationTopics = Object.entries(topicMap)
     .map(([topic, count]) => ({ category: topic, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Merge project-based categories with conversation-based topics
-  // Prefer conversation topics if available since they represent actual user questions
+  // Prefer conversation topics (actual user questions) over project indicators.
   const finalCategories = conversationTopics.length > 0 ? conversationTopics : categories;
 
-  // ── 5. GEOGRAPHY FROM CONVERSATION CONTENT ─────────────────────────────────
-  // Extract countries mentioned in conversation titles as a secondary geo source
   const countryKeywords: Record<string, string[]> = {
     'Nigeria': ['nigeria', 'nigerian'],
     'Kenya': ['kenya', 'kenyan', 'kenia'],
@@ -200,7 +230,7 @@ export async function GET(request: Request) {
   convTitles.forEach((c: any) => {
     const title = (c.title as string).toLowerCase();
     for (const [country, keywords] of Object.entries(countryKeywords)) {
-      if (keywords.some(kw => title.includes(kw))) {
+      if (keywords.some((kw) => title.includes(kw))) {
         convCountryMap[country] = (convCountryMap[country] ?? 0) + 1;
       }
     }
@@ -210,71 +240,49 @@ export async function GET(request: Request) {
     .map(([country, count]) => ({ country, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Use project geography if available, otherwise conversation-based geography
   const finalGeography = geography.length > 0 ? geography : convGeography;
 
-  // ── 6. FEATURE ADOPTION ────────────────────────────────────────────────────
-  const [savedRes, pinnedRes, exportRes, allProfilesRes] = await Promise.all([
-    supabase.from('saved_items').select('user_id'),
-    supabase.from('conversations').select('user_id').eq('is_pinned', true),
-    supabase.from('usage_summary').select('user_id').gt('export_count', 0),
-    supabase.from('profiles').select('*', { count: 'exact', head: true })
-  ]);
-
-  if (savedRes.error) errors.push(`saved_items (adoption): ${savedRes.error.message}`);
-  if (pinnedRes.error) errors.push(`conversations (pinned): ${pinnedRes.error.message}`);
-  if (exportRes.error) errors.push(`usage_summary (export): ${exportRes.error.message}`);
-  if (allProfilesRes.error) errors.push(`profiles (all): ${allProfilesRes.error.message}`);
-
-  const savedAdopters = new Set(savedRes.data?.map((s: any) => s.user_id) ?? []).size;
-  const pinnedAdopters = new Set(pinnedRes.data?.map((c: any) => c.user_id) ?? []).size;
-  const exportAdopters = new Set(exportRes.data?.map((e: any) => e.user_id) ?? []).size;
-  const allTimeUsers = allProfilesRes.count ?? totalUsers;
+  // ── 6. FEATURE ADOPTION (RPC, all-time) ─────────────────────────────────────
+  const adoptionRes = await supabase.rpc('dashboard_adoption');
+  if (adoptionRes.error) rpcError('adoption', adoptionRes.error.message);
+  const adoptionRow = adoptionRes.data?.[0] ?? {};
+  const allTimeUsers = adoptionRow.total_users ?? totalUsers;
+  const pct = (n: number) => (allTimeUsers > 0 ? Number(((n / allTimeUsers) * 100).toFixed(1)) : 0);
 
   const adoption = [
     {
       feature: 'Saved Items',
-      adoptedUsers: savedAdopters,
+      adoptedUsers: adoptionRow.saved_users ?? 0,
       totalUsers: allTimeUsers,
-      percentage: allTimeUsers > 0 ? Number(((savedAdopters / allTimeUsers) * 100).toFixed(1)) : 0,
+      percentage: pct(adoptionRow.saved_users ?? 0),
     },
     {
       feature: 'Pinned Conversations',
-      adoptedUsers: pinnedAdopters,
+      adoptedUsers: adoptionRow.pinned_users ?? 0,
       totalUsers: allTimeUsers,
-      percentage: allTimeUsers > 0 ? Number(((pinnedAdopters / allTimeUsers) * 100).toFixed(1)) : 0,
+      percentage: pct(adoptionRow.pinned_users ?? 0),
     },
     {
       feature: 'Data Export',
-      adoptedUsers: exportAdopters,
+      adoptedUsers: adoptionRow.export_users ?? 0,
       totalUsers: allTimeUsers,
-      percentage: allTimeUsers > 0 ? Number(((exportAdopters / allTimeUsers) * 100).toFixed(1)) : 0,
+      percentage: pct(adoptionRow.export_users ?? 0),
     },
   ];
 
-  // ── 7. ENGAGEMENT ──────────────────────────────────────────────────────────
-  const msgEngRes = await supabase.from('messages').select('follow_up_questions');
-  if (msgEngRes.error) errors.push(`messages (engagement): ${msgEngRes.error.message}`);
+  // ── 7. ENGAGEMENT (RPC, windowed) ───────────────────────────────────────────
+  const engRes = await supabase.rpc('dashboard_engagement', { p_start: startDate });
+  if (engRes.error) rpcError('engagement', engRes.error.message);
+  const engRow = engRes.data?.[0] ?? {};
+  const avgFollowUpQuestions = Number(Number(engRow.avg_followups ?? 0).toFixed(1));
+  const avgMessagesPerConversation = Number(Number(engRow.avg_msgs_per_conv ?? 0).toFixed(1));
 
-  const msgRows = msgEngRes.data ?? [];
-  const totalFollowUps = msgRows.reduce(
-    (acc: number, m: any) => acc + ((m.follow_up_questions as string[] | null)?.length ?? 0),
-    0
-  );
-  const avgFollowUpQuestions = msgRows.length > 0 ? Number((totalFollowUps / msgRows.length).toFixed(1)) : 0;
-  const avgMessagesPerConversation = totalConversations > 0
-    ? Number((totalMessages / totalConversations).toFixed(1))
-    : 0;
-
-  // ── 8. THEME PREFERENCES ───────────────────────────────────────────────────
-  const prefRes = await supabase.from('user_preferences').select('theme');
-  if (prefRes.error) errors.push(`user_preferences: ${prefRes.error.message}`);
-
-  const prefRows = prefRes.data ?? [];
+  // ── 8. THEME PREFERENCES (RPC, all-time) ────────────────────────────────────
+  const themeRes = await supabase.rpc('dashboard_theme_counts');
+  if (themeRes.error) rpcError('themes', themeRes.error.message);
   const themeMap: Record<string, number> = { dark: 0, light: 0, system: 0 };
-  prefRows.forEach((p: any) => {
-    const t = p.theme as string;
-    if (t in themeMap) themeMap[t]++;
+  (themeRes.data ?? []).forEach((r: any) => {
+    if (r.theme in themeMap) themeMap[r.theme] = r.count ?? 0;
   });
   const themes = [
     { theme: 'dark' as const, count: themeMap.dark },
@@ -292,6 +300,7 @@ export async function GET(request: Request) {
         totalQueries,
         totalVisualizations,
         avgSessionDurationSec,
+        activeUsers,
       },
       trends,
       categories: finalCategories,
@@ -308,7 +317,7 @@ function emptyDashboard() {
   return {
     kpis: {
       totalUsers: 0, totalConversations: 0, totalMessages: 0,
-      totalQueries: 0, totalVisualizations: 0, avgSessionDurationSec: 0,
+      totalQueries: 0, totalVisualizations: 0, avgSessionDurationSec: 0, activeUsers: 0,
     },
     trends: [],
     categories: [],

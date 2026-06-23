@@ -3,7 +3,8 @@
 // ============================================================================
 
 export interface TopKPIs {
-  totalUsers: number;
+  totalUsers: number;        // all-time cumulative
+  activeUsers: number;       // distinct users active in the selected period
   totalConversations: number;
   totalMessages: number;
   totalQueries: number;

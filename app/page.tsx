@@ -5,9 +5,10 @@ import { DashboardLayout } from '../components/DashboardLayout';
 import { MetricCard } from '../components/MetricCard';
 import { FilterControls } from '../components/FilterControls';
 import { TrendChart, CategoryChart, GeoChart, AdoptionChart } from '../components/Charts';
-import { Users, MessageSquare, Database, Clock, HelpCircle, AlertTriangle, Wifi } from 'lucide-react';
+import { Users, Activity, MessageSquare, Database, Clock, HelpCircle, AlertTriangle, Wifi } from 'lucide-react';
 import { DashboardData } from '../lib/types';
 import { supabase, isRealSupabaseConfigured, fetchDashboardData } from '../lib/supabase';
+import { TractionSection } from '../components/TractionSection';
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -17,7 +18,6 @@ export default function DashboardPage() {
 
   // Filters state
   const [days, setDays] = useState('7');
-  const [region, setRegion] = useState('all');
 
   useEffect(() => {
     let active = true;
@@ -26,11 +26,13 @@ export default function DashboardPage() {
 
     const loadData = async () => {
       setLoading(true);
-      const { data: result, errors } = await fetchDashboardData(days, region);
+      const { data: result, errors } = await fetchDashboardData(days);
       if (!active) return;
       setData(result);
       setQueryErrors(errors);
-      setIsLive(isRealSupabaseConfigured() && errors.length === 0);
+      // "Live" means we reached Supabase. Per-query errors are surfaced in the
+      // banner but should not flip the whole dashboard to "not connected".
+      setIsLive(isRealSupabaseConfigured());
       setLoading(false);
     };
 
@@ -40,7 +42,7 @@ export default function DashboardPage() {
       channel = supabase.channel('dashboard-realtime-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => loadData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => loadData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'usage_summary' }, () => loadData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'usage_analytics' }, () => loadData())
         .subscribe();
     }
 
@@ -48,7 +50,7 @@ export default function DashboardPage() {
       active = false;
       if (channel && supabase) supabase.removeChannel(channel);
     };
-  }, [days, region]);
+  }, [days]);
 
   if (loading) {
     return (
@@ -120,7 +122,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <FilterControls days={days} setDays={setDays} region={region} setRegion={setRegion} />
+      <FilterControls days={days} setDays={setDays} />
+
+      {/* Scope note — makes it explicit which numbers follow the date filter. */}
+      <div style={{ color: 'var(--text-secondary)', fontSize: '12px', margin: '0 0 20px 2px' }}>
+        Activity metrics reflect {periodLabel(days)}. <strong>Total Users</strong> and{' '}
+        <strong>Feature Adoption</strong> are all-time.
+      </div>
 
       {/* KPIs */}
       <div className="metrics-grid">
@@ -128,6 +136,11 @@ export default function DashboardPage() {
           title="Total Users"
           value={data.kpis.totalUsers.toLocaleString()}
           icon={Users}
+        />
+        <MetricCard
+          title="Active Users"
+          value={data.kpis.activeUsers.toLocaleString()}
+          icon={Activity}
         />
         <MetricCard
           title="Conversations"
@@ -159,7 +172,7 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : (
-        <EmptyState label="No daily usage data yet (usage_summary is empty)" />
+        <EmptyState label="No daily usage data yet (no session events in usage_analytics)" />
       )}
 
       {/* Charts Row 2 — Category + Geo */}
@@ -214,8 +227,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Growth / Traction */}
+      <TractionSection days={days} />
+
     </DashboardLayout>
   );
+}
+
+function periodLabel(days: string): string {
+  if (days === 'all') return 'all time';
+  return `the last ${days} days`;
 }
 
 function EmptyState({ label }: { label: string }) {

@@ -10,6 +10,7 @@ const getOffsetDate = (daysAgo: number) => {
 export const mockDashboardData: DashboardData = {
   kpis: {
     totalUsers: 12450,
+    activeUsers: 3200,
     totalConversations: 85300,
     totalMessages: 341200,
     totalQueries: 95000,
