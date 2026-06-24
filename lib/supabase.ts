@@ -1,13 +1,28 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DashboardData } from './types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Create the client only if env variables are provided
-export const supabase = supabaseUrl && supabaseKey
-  ? createClient(supabaseUrl, supabaseKey)
-  : null;
+// Cache the client on globalThis so dev Fast Refresh / repeated imports reuse a
+// single instance. Without this, each HMR re-evaluation would call createClient
+// again and Supabase warns: "Multiple GoTrueClient instances detected in the
+// same browser context."
+const globalForSupabase = globalThis as unknown as { __pcSupabase?: SupabaseClient };
+
+// Create the client only if env variables are provided.
+export const supabase: SupabaseClient | null = (() => {
+  if (!supabaseUrl || !supabaseKey) return null;
+  if (!globalForSupabase.__pcSupabase) {
+    globalForSupabase.__pcSupabase = createClient(supabaseUrl, supabaseKey, {
+      // The dashboard only reads anon data and subscribes to realtime; it never
+      // signs a user in, so there is no session to persist. Disabling it also
+      // removes the shared auth-storage key that GoTrue guards against.
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return globalForSupabase.__pcSupabase;
+})();
 
 // Helper to check if real-time data should be used
 export const isRealSupabaseConfigured = () => supabase !== null;

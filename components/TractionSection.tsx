@@ -30,40 +30,44 @@ export function TractionSection({ days }: { days: string }) {
   }, [days, excludeInternal]);
 
   const tab = (id: 'traction' | 'retention', label: string) => (
-    <button onClick={() => setView(id)} className="filter-select"
-      style={{ cursor: 'pointer', fontWeight: view === id ? 700 : 400,
-        color: view === id ? 'var(--accent-primary)' : 'var(--text-secondary)',
-        borderColor: view === id ? 'var(--accent-primary)' : 'var(--border-color)' }}>
+    <button onClick={() => setView(id)} type="button" aria-pressed={view === id}>
       {label}
     </button>
   );
 
   return (
-    <div style={{ marginTop: '32px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
+    <div id="traction" className="scroll-anchor" style={{ marginTop: 'var(--space-8)' }}>
+      <div className="section-head">
+        <div>
+          <h2 className="section-title">Growth &amp; Traction</h2>
+          <p className="section-desc">Who is using Policy Copilot and how deeply</p>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+        <div className="segmented">
           {tab('traction', 'Traction & Engagement')}
           {tab('retention', 'Retention & Stickiness')}
         </div>
-        <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+        <label className="toggle-label">
           <input type="checkbox" checked={excludeInternal} onChange={(e) => setExcludeInternal(e.target.checked)} />
           Exclude team &amp; test accounts
         </label>
       </div>
 
       {errors.length > 0 && (
-        <div style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '12px', padding: '10px 14px', marginBottom: '16px', color: 'var(--text-secondary)', fontSize: '12px', fontFamily: 'monospace' }}>
-          {errors.map((e, i) => <div key={i}>{e}</div>)}
+        <div className="banner banner--warning" style={{ fontFamily: 'ui-monospace, monospace' }}>
+          {errors.map((e, i) => <div key={i} className="banner__item" style={{ paddingLeft: 0 }}>{e}</div>)}
         </div>
       )}
 
       {view === 'traction' ? (
         <>
           <div className="metrics-grid">
-            <MetricCard title="Real Users" value={data.kpis.realUsers.toLocaleString()} icon={Users} />
-            <MetricCard title="Active (period)" value={data.kpis.activeUsers.toLocaleString()} icon={Activity} />
-            <MetricCard title="Organizations" value={data.kpis.orgCount.toLocaleString()} icon={Building2} />
-            <MetricCard title="Queries / Active User" value={data.kpis.avgQueriesPerActive} icon={Database} />
+            <MetricCard title="Real Users" value={data.kpis.realUsers.toLocaleString()} icon={Users} caption="excl. team & test" delay={0} />
+            <MetricCard title="Active Users" value={data.kpis.activeUsers.toLocaleString()} icon={Activity} caption="in period" delay={0.05} />
+            <MetricCard title="Organizations" value={data.kpis.orgCount.toLocaleString()} icon={Building2} caption="self-identified" delay={0.1} />
+            <MetricCard title="Queries / Active User" value={data.kpis.avgQueriesPerActive} icon={Database} caption="engagement depth" delay={0.15} />
           </div>
           <div className="charts-grid">
             <CompositionPanel rows={data.composition} orgs={data.topOrgs} />
@@ -71,8 +75,11 @@ export function TractionSection({ days }: { days: string }) {
           </div>
         </>
       ) : (
-        <div className="glass-panel chart-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px', color: 'var(--text-secondary)', fontSize: '14px', textAlign: 'center' }}>
-          Retention &amp; Stickiness — available once Phase 2 ships.
+        <div className="glass-panel chart-container">
+          <div className="empty-state" style={{ margin: 'auto' }}>
+            <span className="empty-icon"><Activity size={20} /></span>
+            Retention &amp; Stickiness — available once Phase 2 ships.
+          </div>
         </div>
       )}
     </div>

@@ -5,7 +5,9 @@ import { DashboardLayout } from '../components/DashboardLayout';
 import { MetricCard } from '../components/MetricCard';
 import { FilterControls } from '../components/FilterControls';
 import { TrendChart, CategoryChart, GeoChart, AdoptionChart } from '../components/Charts';
-import { Users, Activity, MessageSquare, Database, Clock, HelpCircle, AlertTriangle, Wifi } from 'lucide-react';
+import {
+  Users, Activity, MessageSquare, Database, Clock, HelpCircle, AlertTriangle, BarChart3,
+} from 'lucide-react';
 import { DashboardData } from '../lib/types';
 import { supabase, isRealSupabaseConfigured, fetchDashboardData } from '../lib/supabase';
 import { TractionSection } from '../components/TractionSection';
@@ -63,14 +65,14 @@ export default function DashboardPage() {
         gap: '16px',
         color: 'var(--text-secondary)',
         background: 'var(--bg-primary)',
-        fontFamily: 'var(--font-inter, sans-serif)'
+        fontFamily: 'var(--font-inter, sans-serif)',
       }}>
         <div style={{
           width: '40px', height: '40px',
           border: '3px solid var(--border-color)',
           borderTop: '3px solid var(--accent-primary)',
           borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
+          animation: 'spin 1s linear infinite',
         }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <span style={{ fontSize: '14px' }}>Connecting to Supabase…</span>
@@ -80,91 +82,96 @@ export default function DashboardPage() {
 
   if (!data) return null;
 
-  return (
-    <DashboardLayout>
+  const period = periodLabel(days);
 
-      {/* ── Connection Status Banner ── */}
+  return (
+    <DashboardLayout isLive={isLive}>
+
+      {/* ── Per-query error banner ── */}
       {queryErrors.length > 0 && (
-        <div style={{
-          background: 'rgba(245,158,11,0.1)',
-          border: '1px solid rgba(245,158,11,0.3)',
-          borderRadius: '12px',
-          padding: '12px 16px',
-          marginBottom: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309', fontWeight: 600, fontSize: '13px' }}>
+        <div className="banner banner--warning">
+          <div className="banner__title">
             <AlertTriangle size={15} />
             Some queries returned errors (check RLS policies or column names):
           </div>
           {queryErrors.map((e, i) => (
-            <div key={i} style={{ color: 'var(--text-secondary)', fontSize: '12px', paddingLeft: '23px', fontFamily: 'monospace' }}>
-              {e}
-            </div>
+            <div key={i} className="banner__item">{e}</div>
           ))}
-        </div>
-      )}
-
-      {isLive && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          marginBottom: '16px',
-          color: 'var(--success)',
-          fontSize: '12px',
-          fontWeight: 600
-        }}>
-          <Wifi size={13} />
-          Connected to Supabase — live data
         </div>
       )}
 
       <FilterControls days={days} setDays={setDays} />
 
-      {/* Scope note — makes it explicit which numbers follow the date filter. */}
-      <div style={{ color: 'var(--text-secondary)', fontSize: '12px', margin: '0 0 20px 2px' }}>
-        Activity metrics reflect {periodLabel(days)}. <strong>Total Users</strong> and{' '}
-        <strong>Feature Adoption</strong> are all-time.
+      {/* ── Overview ── */}
+      <div className="section-head scroll-anchor" id="overview">
+        <div>
+          <h2 className="section-title">Overview</h2>
+          <p className="section-desc">
+            Activity reflects {period}. Total Users &amp; Feature Adoption are all-time.
+          </p>
+        </div>
       </div>
 
-      {/* KPIs */}
-      <div className="metrics-grid">
+      {/* Headline KPIs */}
+      <div className="metrics-grid metrics-grid--primary">
         <MetricCard
           title="Total Users"
           value={data.kpis.totalUsers.toLocaleString()}
           icon={Users}
+          caption="all-time"
+          variant="primary"
+          delay={0}
         />
         <MetricCard
           title="Active Users"
           value={data.kpis.activeUsers.toLocaleString()}
           icon={Activity}
+          caption={period}
+          delay={0.05}
         />
         <MetricCard
           title="Conversations"
           value={data.kpis.totalConversations.toLocaleString()}
           icon={MessageSquare}
+          caption={period}
+          delay={0.1}
         />
+      </div>
+
+      {/* Secondary KPIs */}
+      <div className="metrics-grid">
         <MetricCard
           title="User Messages"
           value={data.kpis.totalQueries.toLocaleString()}
           icon={Database}
+          caption={period}
+          delay={0.15}
         />
         <MetricCard
-          title="Avg Session (s)"
-          value={data.kpis.avgSessionDurationSec.toLocaleString()}
+          title="Avg Session"
+          value={`${data.kpis.avgSessionDurationSec.toLocaleString()}s`}
           icon={Clock}
+          caption={period}
+          delay={0.2}
         />
         <MetricCard
           title="Avg Follow-ups"
           value={data.engagement.avgFollowUpQuestions}
           icon={HelpCircle}
+          caption="per conversation"
+          delay={0.25}
         />
       </div>
 
-      {/* Charts Row 1 — Trend */}
+      {/* ── Trends & Distribution ── */}
+      <div className="section-head scroll-anchor" id="trends">
+        <div>
+          <h2 className="section-title">Trends &amp; Distribution</h2>
+          <p className="section-desc">How usage moves over time and where it concentrates</p>
+        </div>
+      </div>
+
+      {/* Trend (full width) */}
       {data.trends.length > 0 ? (
         <div className="charts-grid">
           <div className="chart-full-width">
@@ -175,25 +182,31 @@ export default function DashboardPage() {
         <EmptyState label="No daily usage data yet (no session events in usage_analytics)" />
       )}
 
-      {/* Charts Row 2 — Category + Geo */}
+      {/* Category + Geo */}
       <div className="charts-grid">
         {data.categories.length > 0
           ? <CategoryChart data={data.categories} />
-          : <EmptyState label="No category/indicator data from projects table" />}
+          : <EmptyState label="No category / indicator data from projects table" />}
         {data.geography.length > 0
           ? <GeoChart data={data.geography} />
           : <EmptyState label="No country data from projects table" />}
       </div>
 
-      {/* Charts Row 3 — Adoption + Insights */}
-      <div className="charts-grid">
+      {/* Adoption + Insights */}
+      <div className="charts-grid scroll-anchor" id="insights">
         {data.adoption.length > 0
           ? <AdoptionChart data={data.adoption} />
           : <EmptyState label="No feature adoption data available" />}
 
-        <div className="glass-panel chart-container fade-in" style={{ animationDelay: '0.6s' }}>
-          <h3 className="chart-title">Live Insights</h3>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.8', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className="glass-panel chart-container is-auto fade-in" style={{ animationDelay: '0.6s' }}>
+          <div className="chart-head">
+            <div>
+              <h3 className="chart-title">Live Insights</h3>
+              <p className="chart-subtitle">Key highlights pulled from current data</p>
+            </div>
+            <span className="pill"><BarChart3 size={12} /> snapshot</span>
+          </div>
+          <div className="insight-list">
             <InsightRow
               label="Total Messages Sent"
               value={data.kpis.totalMessages.toLocaleString()}
@@ -202,32 +215,32 @@ export default function DashboardPage() {
             <InsightRow
               label="Avg Messages / Conversation"
               value={data.engagement.avgMessagesPerConversation.toString()}
-              color="var(--accent-secondary)"
+              color="var(--green-400)"
             />
             <InsightRow
               label="Users Who Saved Items"
               value={`${data.adoption.find(a => a.feature === 'Saved Items')?.adoptedUsers ?? 0} users`}
-              color="#34d399"
+              color="var(--success)"
             />
             {data.categories[0] && (
               <InsightRow
                 label="Top Indicator Category"
                 value={`${data.categories[0].category} (${data.categories[0].count})`}
-                color="var(--accent-primary)"
+                color="var(--green-600)"
               />
             )}
             {data.geography[0] && (
               <InsightRow
                 label="Top Country"
                 value={`${data.geography[0].country} (${data.geography[0].count})`}
-                color="var(--success)"
+                color="var(--green-300)"
               />
             )}
           </div>
         </div>
       </div>
 
-      {/* Growth / Traction */}
+      {/* ── Growth / Traction ── */}
       <TractionSection days={days} />
 
     </DashboardLayout>
@@ -236,25 +249,28 @@ export default function DashboardPage() {
 
 function periodLabel(days: string): string {
   if (days === 'all') return 'all time';
-  return `the last ${days} days`;
+  return `last ${days} days`;
 }
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="glass-panel chart-container" style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '40px'
-    }}>
-      {label}
+    <div className="glass-panel chart-container">
+      <div className="empty-state" style={{ margin: 'auto' }}>
+        <span className="empty-icon"><BarChart3 size={20} /></span>
+        {label}
+      </div>
     </div>
   );
 }
 
 function InsightRow({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-      <span>{label}</span>
-      <span style={{ color, fontWeight: 700, fontSize: '13px' }}>{value}</span>
+    <div className="insight-row">
+      <span className="insight-label">
+        <span className="insight-dot" style={{ background: color }} />
+        {label}
+      </span>
+      <span className="insight-value" style={{ color }}>{value}</span>
     </div>
   );
 }
